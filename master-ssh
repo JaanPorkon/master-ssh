@@ -37,7 +37,7 @@ class MasterSSH:
 		credSourcePath = None
 
 		if args.cred_file != None:
-			credSourcePath = args.cred_url
+			credSourcePath = args.cred_file
 			credSourceType = 'file'
 			
 		if args.cred_url != None:
@@ -48,12 +48,12 @@ class MasterSSH:
 			self.selectedServers = args.servers.strip().split(',')
 
 		if credSourcePath == None:
-			print "You need to specify a credentials path [--cred-url, --cred-path]"
+			print "You need to specify a credentials path [--cred-url, --cred-file]"
 			sys.exit(1)
 
 		if credSourceType == 'file':
 			with open(credSourcePath, 'r') as f:
-				for line in r.readlines():
+				for line in f.readlines():
 					data = line.strip().split(',')
 
 					self.credentials.append({
