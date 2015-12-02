@@ -35,6 +35,10 @@ Example:
 
 `master-ssh$ master-ssh:hostname uname -a`
 
+If you wish to send commands to more than 1 specific server just separate them with commas like this:
+
+`master-ssh$ master-ssh:hostname,hostname2 uname -a`
+
 ####Dependencies
 
 This code is depending on:

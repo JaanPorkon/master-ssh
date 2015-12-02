@@ -7,6 +7,7 @@ import sys
 import time
 import threading
 import ConfigParser
+import os
 
 class MasterSSH:
 
@@ -14,10 +15,15 @@ class MasterSSH:
 	credentials = []
 	config = None
 
+	commandPool = []
+
 	def __init__(self):
 
+		configPath = os.path.realpath("/usr/local/bin/master-ssh").split('/')
+		configPath.pop()
+
 		self.config = ConfigParser.ConfigParser()
-		self.config.read('master-ssh.conf')
+		self.config.read("/".join(configPath) + "/" + "master-ssh.conf")
 
 		parser = argparse.ArgumentParser()
 		parser.add_argument('--cred-url', dest='cred_url', default=None, help='URL that points to credentials data')
@@ -83,13 +89,13 @@ class MasterSSH:
 	def connect(self, name, host, username, password):
 
 		tries = 1
-		maxTries = self.config.get('connection', 'max_retries')
-		delay = self.config.get('connection', 'delay')
+		maxTries = int(self.config.get('connection', 'max_retries'))
+		delay = float(self.config.get('connection', 'delay'))
 
 		while True:
 
 			if tries == maxTries:
-				print "\033[91mUnable to connect to: " + name + "\033[0m"
+				self.printError("Unable to connect to: " + name)
 				break
 
 			try:
@@ -99,13 +105,13 @@ class MasterSSH:
 
 				connected = True
 			except:
-				print "\033[91mFailed to connect to: " + name + "... retrying (" + str(tries) + "/" + str(maxTries) + ")\033[0m"
+				self.printError("Failed to connect to: " + name + "... retrying (" + str(tries) + "/" + str(maxTries) + ")")
 				connected = False
 				tries += 1
 				time.sleep(delay)
 
 			if connected:
-				print "\033[92mSuccessfully connected to: " + name + '\033[0m'
+				self.printSuccess("Successfully connected to: " + name)
 				break
 
 
@@ -124,13 +130,19 @@ class MasterSSH:
 			threadPool[i].join()	
 
 	def exit(self, name):
-			self.connectionPool[name].exec_command('exit')
-			self.connectionPool[name].close()
-			print '\033[92m\033[1m\033[4m[' + name + ']\033[0m: disconnected...'
+			
+			try:
+				self.connectionPool[name].exec_command('exit')
+				self.connectionPool[name].close()
+			except Exception, e:
+				self.printError(str(e))
+
+			self.printAction(name, "disconnected...")
 
 	def listen(self):
 		
 		while True:
+
 			cmd = raw_input('\nmaster-ssh$ ').strip()
 
 			if cmd == "exit":
@@ -142,18 +154,48 @@ class MasterSSH:
 					findSpace = cmd.find(' ')
 					command = cmd[(findSpace + 1):len(cmd)].strip()
 					server = cmd[11:findSpace].strip()
+					
+					if "," in server:
 
-					stdin, stdout, stderr = self.connectionPool[server].exec_command(command)
+						threadPool = {}
+						threadPos = 1
 
-					response = '\n\033[92m\033[1m\033[4m[' + server + ']\033[0m: \n'
+						for server in server.split(','):
 
-					for line in stderr:
-						response += '\033[91m' + line + '\033[0m'
+							if server not in self.connectionPool:
+								self.printError(server + " does not exist!")
+							else:
+								con = self.connectionPool[server]
 
-					for line in stdout:
-						response += line
+								threadPool[threadPos] = threading.Thread(target=self.execute, args=(command, server, con,))
+								threadPool[threadPos].daemon = True
+								threadPool[threadPos].start()
+								threadPos += 1
+							
+						for i in range(1, threadPos):
+							threadPool[i].join()
 
-					print response.strip('\n')
+					else:
+
+						if server not in self.connectionPool:
+							self.printError(server + " does not exist!")
+						else:
+							stdin, stdout, stderr = self.connectionPool[server].exec_command(command)
+
+							error = ""
+
+							for line in stderr:
+								error += "\n" + line
+
+							self.printServerError(server, error.strip())
+
+							response = ""
+
+							for line in stdout:
+								response += line
+
+							self.printAction(server, response.strip())
+
 
 				else:
 					threadPool = {}
@@ -174,15 +216,39 @@ class MasterSSH:
 	def execute(self, cmd, name, con):
 		stdin, stdout, stderr = con.exec_command(cmd)
 
-		response = '\n\033[92m\033[1m\033[4m[' + name + ']\033[0m: \n'
+		error = ""
 
 		for line in stderr:
-			response += '\033[91m' + line + '\033[0m'
+			error += "\n" + line
+
+		self.printServerError(name, error.strip())
+
+		response = ""
 
 		for line in stdout:
 			response += line
 
-		print response.strip('\n')
+		self.printAction(name, response.strip())
+
+	"""
+	Helper methods
+	"""
+
+	def printAction(self, server, message):
+		print '\033[92m\033[1m\033[4m[' + server + ' | Output]\033[0m: ' + message
+
+	def printSuccess(self, message):
+		print "\033[92m" + message + '\033[0m'
+
+	def printError(self, message):
+
+		if message != "":
+			print 'master-ssh: \033[91m' + message + '\033[0m'
+
+	def printServerError(self, server, message):
+
+		if message != "":
+			print '\033[92m\033[1m\033[4m[' + server + ' | Error]\033[0m: \033[91m' + message + '\033[0m'
 
 
 m = MasterSSH()
