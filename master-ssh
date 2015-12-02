@@ -6,13 +6,19 @@ import argparse
 import sys
 import time
 import threading
+import ConfigParser
 
 class MasterSSH:
 
 	connectionPool = {}
 	credentials = []
+	config = None
 
 	def __init__(self):
+
+		self.config = ConfigParser.ConfigParser()
+		self.config.read('master-ssh.conf')
+
 		parser = argparse.ArgumentParser()
 		parser.add_argument('--cred-url', dest='cred_url', default=None, help='URL that points to credentials data')
 		parser.add_argument('--cred-file', dest='cred_file', default=None, help='Path to your credentials file')
@@ -77,12 +83,13 @@ class MasterSSH:
 	def connect(self, name, host, username, password):
 
 		tries = 1
-		maxTries = 5
+		maxTries = self.config.get('connection', 'max_retries')
+		delay = self.config.get('connection', 'delay')
 
 		while True:
 
 			if tries == maxTries:
-				print "Unable to connect to: " + cred['name']
+				print "\033[91mUnable to connect to: " + name + "\033[0m"
 				break
 
 			try:
@@ -95,7 +102,7 @@ class MasterSSH:
 				print "\033[91mFailed to connect to: " + name + "... retrying (" + str(tries) + "/" + str(maxTries) + ")\033[0m"
 				connected = False
 				tries += 1
-				time.sleep(3)
+				time.sleep(delay)
 
 			if connected:
 				print "\033[92mSuccessfully connected to: " + name + '\033[0m'
@@ -138,7 +145,7 @@ class MasterSSH:
 
 					stdin, stdout, stderr = self.connectionPool[server].exec_command(command)
 
-					response = '\033[92m\033[1m\033[4m[' + server + ']\033[0m: \n'
+					response = '\n\033[92m\033[1m\033[4m[' + server + ']\033[0m: \n'
 
 					for line in stderr:
 						response += '\033[91m' + line + '\033[0m'
