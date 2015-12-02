@@ -19,13 +19,19 @@ hostname,127.0.0.1,username,password
 hostname2,127.0.0.2,username,password
 ```
 
-Example:
+Getting credentials:
 
 `master-ssh --cred-file /path/to/credentials.txt`
 
 or
 
 `master-ssh --cred-url https://mydomain.tld/credentials`
+
+or if you wish to connect to specific servers:
+
+`master-ssh --cred-url https://mydomain.tld/credentials --servers hostname,hostname2`
+
+Connecting to servers:
 
 To send command to 1 server only use the following command pattern:
 
@@ -38,6 +44,7 @@ Example:
 If you wish to send commands to more than 1 specific server just separate them with commas like this:
 
 `master-ssh$ master-ssh:hostname,hostname2 uname -a`
+
 
 ####Dependencies
 
