@@ -29,13 +29,13 @@ or
 
 or if you wish to connect to specific servers:
 
-`master-ssh --cred-url https://mydomain.tld/credentials --servers hostname,hostname2`
+`master-ssh --cred-url https://mydomain.tld/credentials --servers hostname,hostname2,...`
 
 **Connecting to servers:**
 
 To send command to 1 server only use the following command pattern:
 
-_#:[hostname] [command]_
+_#[hostname] [command]_
 
 **Examples:**
 

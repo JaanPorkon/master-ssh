@@ -315,7 +315,7 @@ class MasterSSH:
 									for line in stdout:
 										response += line
 
-									self.printAction(server, response.strip())
+									self.printServerAction(server, response.strip())
 
 
 				else:
@@ -349,7 +349,7 @@ class MasterSSH:
 		for line in stdout:
 			response += line
 
-		self.printAction(name, response.strip())
+		self.printServerAction(name, response.strip())
 
 	"""
 	Helper methods
@@ -359,7 +359,10 @@ class MasterSSH:
 		print message
 
 	def printAction(self, server, message):
-		print '\033[92m\033[1m\033[4m[' + server + ']\033[0m: \n' + message
+		print '\033[92m\033[1m\033[4m[' + server + ']\033[0m: ' + message
+
+	def printServerAction(self, server, message):
+		print '\033[92m\033[1m\033[4m[' + server + ']\033[0m:\n' + message
 
 	def printSuccess(self, message):
 		print "\033[92m" + message + '\033[0m'
