@@ -18,14 +18,20 @@ class MasterSSH:
 
 	commandPool = []
 
+	"""
+	Initalize everything
+	"""
+
 	def __init__(self):
 
+		# Load configuration
 		configPath = os.path.realpath("/usr/local/bin/master-ssh").split('/')
 		configPath.pop()
 
 		self.config = ConfigParser.ConfigParser()
 		self.config.read("/".join(configPath) + "/" + "master-ssh.conf")
 
+		# Parse command line arguments
 		parser = argparse.ArgumentParser()
 		parser.add_argument('--cred-url', dest='cred_url', default=None, help='URL that points to credentials data')
 		parser.add_argument('--cred-file', dest='cred_file', default=None, help='Path to your credentials file')
@@ -36,21 +42,31 @@ class MasterSSH:
 		credSourceType = None
 		credSourcePath = None
 
+		# Validate that file exists and assign it as credentials source
 		if args.cred_file != None:
-			credSourcePath = args.cred_file
-			credSourceType = 'file'
+
+			if os.path.isfile(args.cred_file): 
+				credSourcePath = args.cred_file
+				credSourceType = 'file'
+			else:
+				self.printError(args.cred_file + " does not exist!")
+				sys.exit(1)
 			
+		# Assign URL as credentials source
 		if args.cred_url != None:
 			credSourcePath = args.cred_url
 			credSourceType = 'url'
 
+		# If there are specific servers selected, store their names
 		if args.servers != None:
 			self.selectedServers = args.servers.strip().split(',')
 
+		# If credentials path has not been defined, show an error
 		if credSourcePath == None:
-			print "You need to specify a credentials path [--cred-url, --cred-file]"
+			self.printError("You need to specify a credentials path [--cred-url, --cred-file]")
 			sys.exit(1)
 
+		# If credentials source is file, pull info from it
 		if credSourceType == 'file':
 			with open(credSourcePath, 'r') as f:
 				for line in f.readlines():
@@ -63,10 +79,38 @@ class MasterSSH:
 						'password': data[3]
 					})
 
+		# If credentials source is an URL, download the data
 		if credSourceType == 'url':
-			response = requests.get(credSourcePath)
+			
+			try:
+				request = requests.get(credSourcePath)
+			except requests.ConnectionError, e:
+				self.printError("Failed to download data! Please check your URL.")
+				sys.exit(1)
+			except requests.HTTPError, e:
+				self.printError("Bad HTTP request!")
+				sys.exit(1)
+			except requests.Timeout, e:
+				self.printError("Connection to your domain timed out, please check your server!")
+				sys.exit(1)
+			except requests.TooManyRedirects, e:
+				self.printError("There are too many redirects for your URL, check your server configuration!")
+				sys.exit(1)
+			except Exception, e:
+				self.printError("Something went wrong: " + str(e))
+				sys.exit(1)
 
-			for line in response.text.strip().split('\n'):
+			response = request.text.strip()
+
+			if request.status_code not in [200, 301, 302]:
+				self.printError(credSourcePath + " did not respond correctly (" + request.status_code + ")!")
+				sys.exit(1)
+
+			if response == "":
+				self.printError(credSourcePath + " does not contain any data!")
+				sys.exit(1)
+
+			for line in response.split('\n'):
 				data = line.split(',')
 
 				self.credentials.append({
@@ -76,6 +120,9 @@ class MasterSSH:
 					'password': data[3]
 				})
 
+	"""
+	Create connection threads
+	"""
 	def createConnections(self):	
 
 		threadPool = {}
@@ -86,12 +133,16 @@ class MasterSSH:
 			useSelectedServers = True			
 
 		for cred in self.credentials:
+
+			# If there are specific servers user wants to use, use them ...
 			if useSelectedServers:
 				if cred['name'] in self.selectedServers:
 					threadPool[threadPos] = threading.Thread(target=self.connect, args=(cred['name'], cred['host'], cred['username'], cred['password'],))
 					threadPool[threadPos].daemon = True
 					threadPool[threadPos].start()
 					threadPos += 1
+
+			# ... if not, use all of them
 			else:
 				threadPool[threadPos] = threading.Thread(target=self.connect, args=(cred['name'], cred['host'], cred['username'], cred['password'],))
 				threadPool[threadPos].daemon = True
@@ -102,8 +153,9 @@ class MasterSSH:
 		for i in range(1, threadPos):
 			threadPool[i].join()
 
-			
-
+	"""
+	Connect to the server
+	"""
 	def connect(self, name, host, username, password):
 
 		tries = 1
@@ -132,7 +184,9 @@ class MasterSSH:
 				self.printSuccess("Successfully connected to: " + name)
 				break
 
-
+	"""
+	Create connection closing threads
+	"""
 	def closeConnections(self):
 
 		threadPool = {}
@@ -147,6 +201,9 @@ class MasterSSH:
 		for i in range(1, threadPos):
 			threadPool[i].join()	
 
+	"""
+	Close all open connections
+	"""
 	def exit(self, name):
 			
 			try:
@@ -157,10 +214,14 @@ class MasterSSH:
 
 			self.printAction(name, "disconnected...")
 
+	"""
+	Listen for user commands
+	"""
 	def listen(self):
 		
 		while True:
 
+			# Listen for user input
 			cmd = raw_input('\nmaster-ssh$ ').strip()
 
 			if cmd == "exit":
@@ -168,6 +229,7 @@ class MasterSSH:
 				break
 			else:
 
+				# Check for internal commands
 				if cmd.startswith('#'):
 
 					"""
@@ -197,6 +259,7 @@ class MasterSSH:
 						print "                                         #disconnect:host2,host3"
 						print "ignore:[hostname,hostname2] [command]  - Ignores servers that are listed"
 
+					# List all connections
 					elif cmd == "#list-connections":
 						
 						for name, con in self.connectionPool.iteritems():
@@ -208,6 +271,7 @@ class MasterSSH:
 							else:
 								self.printServerError(name, "is disconnected")
 
+					# Disconnect specific servers from the pool
 					elif cmd.startswith('#disconnect'):
 
 						servers = cmd.strip().split(':')[-1]
@@ -248,6 +312,7 @@ class MasterSSH:
 						findSpace = cmd.find(' ')
 						command = cmd[(findSpace + 1):len(cmd)].strip()
 
+						# If user wishes to ignore specific servers, do so ...
 						if cmd.startswith("#ignore:"):
 							serverListStart = 8
 							useIgnoreList = True
@@ -274,8 +339,10 @@ class MasterSSH:
 
 							ignoreList = []
 
+						# ... if not, send the command to ...
 						else:
 						
+							# ... specific servers that user has defined or ...
 							if "," in server:
 
 								threadPool = {}
@@ -296,6 +363,7 @@ class MasterSSH:
 								for i in range(1, threadPos):
 									threadPool[i].join()
 
+							# ... send the command to one specific server
 							else:
 
 								if server not in self.connectionPool:
@@ -318,6 +386,7 @@ class MasterSSH:
 									self.printServerAction(server, response.strip())
 
 
+				# If user haven't defined any internal comments, send user's command to all of the servers
 				else:
 					threadPool = {}
 					threadPos = 1	
@@ -332,8 +401,9 @@ class MasterSSH:
 					for i in range(1, threadPos):
 						threadPool[i].join()
 							
-						
-
+	"""
+	Execute user's command
+	"""
 	def execute(self, cmd, name, con):
 		stdin, stdout, stderr = con.exec_command(cmd)
 
