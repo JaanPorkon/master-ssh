@@ -25,46 +25,40 @@ class MasterSSH:
 	def __init__(self):
 
 		# Load configuration
-		configPath = os.path.realpath("/usr/local/bin/master-ssh").split('/')
-		configPath.pop()
+		self.parseConfig()
 
-		self.config = ConfigParser.ConfigParser()
-		self.config.read("/".join(configPath) + "/" + "master-ssh.conf")
+		# Set log's path:		
+		self.initLogs()
 
 		# Parse command line arguments
-		parser = argparse.ArgumentParser()
-		parser.add_argument('--cred-url', dest='cred_url', default=None, help='URL that points to credentials data')
-		parser.add_argument('--cred-file', dest='cred_file', default=None, help='Path to your credentials file')
-		parser.add_argument('--servers', dest='servers', default=None, help='A comma separated list of server hostnames')
-
-		args = parser.parse_args()
+		self.parseCli()
 
 		credSourceType = None
 		credSourcePath = None
 
 		# Validate that file exists and assign it as credentials source
-		if args.cred_file != None:
+		if self.args.cred_file != None:
 
-			if os.path.isfile(args.cred_file): 
-				credSourcePath = args.cred_file
+			if os.path.isfile(self.args.cred_file): 
+				credSourcePath = self.args.cred_file
 				credSourceType = 'file'
 			else:
-				self.printError(args.cred_file + " does not exist!")
+				self.printError(self.args.cred_file + " does not exist!")
 				sys.exit(1)
 			
 		# Assign URL as credentials source
-		if args.cred_url != None:
-			credSourcePath = args.cred_url
+		if self.args.cred_url != None:
+			credSourcePath = self.args.cred_url
 			credSourceType = 'url'
 
 		# If there are specific servers selected, store their names
-		if args.servers != None:
-			self.selectedServers = args.servers.strip().split(',')
+		if self.args.servers != None:
+			self.selectedServers = self.args.servers.strip().split(',')
 
 		# If credentials path has not been defined, show an error
-		if credSourcePath == None:
-			self.printError("You need to specify a credentials path [--cred-url, --cred-file]")
-			sys.exit(1)
+		if credSourcePath == None and self.args.manual == False:
+			self.printError("You need to specify a credentials getting method [--cred-url, --cred-file, --manual]")
+			sys.exit(1)		
 
 		# If credentials source is file, pull info from it
 		if credSourceType == 'file':
@@ -84,16 +78,16 @@ class MasterSSH:
 			
 			try:
 				request = requests.get(credSourcePath)
-			except requests.ConnectionError, e:
+			except requests.ConnectionError:
 				self.printError("Failed to download data! Please check your URL.")
 				sys.exit(1)
-			except requests.HTTPError, e:
+			except requests.HTTPError:
 				self.printError("Bad HTTP request!")
 				sys.exit(1)
-			except requests.Timeout, e:
+			except requests.Timeout:
 				self.printError("Connection to your domain timed out, please check your server!")
 				sys.exit(1)
-			except requests.TooManyRedirects, e:
+			except requests.TooManyRedirects:
 				self.printError("There are too many redirects for your URL, check your server configuration!")
 				sys.exit(1)
 			except Exception, e:
@@ -125,6 +119,9 @@ class MasterSSH:
 	"""
 	def createConnections(self):	
 
+		if self.credentials:
+			self.printMessage("Connecting to servers...")
+
 		threadPool = {}
 		threadPos = 1	
 		useSelectedServers = False	
@@ -153,6 +150,8 @@ class MasterSSH:
 		for i in range(1, threadPos):
 			threadPool[i].join()
 
+		self.printMessage("Welcome to master-ssh!")
+
 	"""
 	Connect to the server
 	"""
@@ -174,6 +173,12 @@ class MasterSSH:
 				self.connectionPool[name].connect(host, username=username, password=password)
 
 				connected = True
+			except paramiko.ssh_exception.AuthenticationException:
+				self.printError("Failed to connect to: " + name + " - Wrong login details!")
+				break
+			except paramiko.ssh_exception.BadAuthenticationType:
+				self.printError("Failed to connect to: " + name + " - Bad authentication type!")
+				break
 			except:
 				self.printError("Failed to connect to: " + name + "... retrying (" + str(tries) + "/" + str(maxTries) + ")")
 				connected = False
@@ -199,19 +204,27 @@ class MasterSSH:
 			threadPos += 1
 							
 		for i in range(1, threadPos):
-			threadPool[i].join()	
+			threadPool[i].join()
+
+		self.printSuccess("Bye, bye!")	
 
 	"""
 	Close all open connections
 	"""
 	def exit(self, name):
 			
+			print "exiting"
 			try:
-				self.connectionPool[name].exec_command('exit')
-				self.connectionPool[name].close()
+				print "sending command"
+				self.connectionPool[name].exec_command('exit', timeout=2)	
+				print "Command sent!"			
 			except Exception, e:
+				print "printing error"
 				self.printError(str(e))
 
+			print "sending close"
+			self.connectionPool[name].close()
+			print "close sent"
 			self.printAction(name, "disconnected...")
 
 	"""
@@ -222,7 +235,7 @@ class MasterSSH:
 		while True:
 
 			# Listen for user input
-			cmd = raw_input('\nmaster-ssh$ ').strip()
+			cmd = raw_input('master-ssh$ ').strip()
 
 			if cmd == "exit":
 				self.closeConnections()
@@ -250,14 +263,15 @@ class MasterSSH:
 						print ""
 						print "Below you can find available commands that you can use:"
 						print ""
-						print "help                                   - Displays this message"
-						print "list-connections                       - Lists the state of all connections"
-						print "disconnect:[hostname,hostname2,...]    - Disconnects a specific host and removes it from the pool"
-						print "                                       - Example:"
-						print "                                         #disconnect:host1"
-						print "                                       - or multiple servers:"
-						print "                                         #disconnect:host2,host3"
-						print "ignore:[hostname,hostname2] [command]  - Ignores servers that are listed"
+						print "help                                        - Displays this message"
+						print "list-connections                            - Lists the state of all connections"
+						print "disconnect:[hostname,hostname2,...]         - Disconnects a specific host and removes it from the pool"
+						print "                                            - Example:"
+						print "                                              #disconnect:host1"
+						print "                                            - or multiple servers:"
+						print "                                              #disconnect:host2,host3"
+						print "ignore:[hostname,hostname2] [command]       - Ignores servers that are listed"
+						print "connect:[host],[username],[password],[name] - Connects to a server. [name] is optional, but suggested"
 
 					# List all connections
 					elif cmd == "#list-connections":
@@ -271,8 +285,21 @@ class MasterSSH:
 							else:
 								self.printServerError(name, "is disconnected")
 
+					elif cmd.startswith('#connect:'):
+						data = cmd.replace('#connect:', '').split(':')
+
+						# host:username:password:name*
+						# * name is optional
+
+						if len(data) == 3:
+							self.connect(data[0], data[0], data[1], data[2])
+						elif len(data) == 4:
+							self.connect(data[3], data[0], data[1], data[2])
+						else:
+							self.printError("Not enough arguments!")
+
 					# Disconnect specific servers from the pool
-					elif cmd.startswith('#disconnect'):
+					elif cmd.startswith('#disconnect:'):
 
 						servers = cmd.strip().split(':')[-1]
 
@@ -445,10 +472,36 @@ class MasterSSH:
 		if message != "":
 			print '\033[92m\033[1m\033[4m[' + server + ']\033[0m: \033[91m' + message + '\033[0m'
 
+	def parseConfig(self):
+		configPath = os.path.realpath("/usr/local/bin/master-ssh").split('/')
+		configPath.pop()
+
+		self.config = ConfigParser.ConfigParser()
+		self.config.read("/".join(configPath) + "/" + "master-ssh.conf")
+
+	def initLogs(self):
+		logFile = self.config.get('log', 'paramiko')
+
+		if not os.path.exists(logFile):
+			os.makedirs(os.path.dirname(logFile))
+
+		if not os.path.isfile(logFile):
+			open(logFile, 'w')
+
+		paramiko.util.log_to_file(logFile)
+
+	def parseCli(self):
+		parser = argparse.ArgumentParser()
+		parser.add_argument('--cred-url', dest='cred_url', default=None, help='URL that points to credentials data')
+		parser.add_argument('--cred-file', dest='cred_file', default=None, help='Path to your credentials file')
+		parser.add_argument('--servers', dest='servers', default=None, help='A comma separated list of server hostnames')
+		parser.add_argument('--manual', dest='manual', action='store_true', help='Use this when you wish to connect manually from the program')
+
+		self.args = parser.parse_args()
+
+
 
 m = MasterSSH()
 m.createConnections()
 m.listen()
-
-print "SSH sessions ended, closing..."
 sys.exit(0)
