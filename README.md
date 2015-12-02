@@ -12,14 +12,14 @@ chmod o+x install.sh
 
 ####Usage
 
-To run the program you can feed credentials to it from URL or from a file. Source of the web page and file must be in CSV style:
+To run the program you can feed credentials to it from URL or from a file. Source of the web page and file must be in CSV format:
 
 ```
 hostname,127.0.0.1,username,password
 hostname2,127.0.0.2,username,password
 ```
 
-Getting credentials:
+**Getting credentials:**
 
 `master-ssh --cred-file /path/to/credentials.txt`
 
@@ -31,13 +31,13 @@ or if you wish to connect to specific servers:
 
 `master-ssh --cred-url https://mydomain.tld/credentials --servers hostname,hostname2`
 
-Connecting to servers:
+**Connecting to servers:**
 
 To send command to 1 server only use the following command pattern:
 
 _master-ssh:[hostname] [command]_
 
-Example:
+**Examples:**
 
 `master-ssh$ master-ssh:hostname uname -a`
 
@@ -45,6 +45,9 @@ If you wish to send commands to more than 1 specific server just separate them w
 
 `master-ssh$ master-ssh:hostname,hostname2 uname -a`
 
+If you wish to close the program, simply write exit:
+
+`master-ssh$ exit`
 
 ####Dependencies
 
