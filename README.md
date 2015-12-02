@@ -35,15 +35,29 @@ or if you wish to connect to specific servers:
 
 To send command to 1 server only use the following command pattern:
 
-_master-ssh:[hostname] [command]_
+_#:[hostname] [command]_
 
 **Examples:**
 
-`master-ssh$ master-ssh:hostname uname -a`
+To see all available internal commands write:
+
+`master-ssh$ #help`
+
+or just:
+
+`master-ssh$ #`
+
+If you wish to send your command to only 1 specific server, use the following command:
+
+`master-ssh$ #hostname uname -a`
 
 If you wish to send commands to more than 1 specific server just separate them with commas like this:
 
-`master-ssh$ master-ssh:hostname,hostname2 uname -a`
+`master-ssh$ #hostname,hostname2 uname -a`
+
+If you want to ignore specific servers from your server list, use the following command:
+
+`master-ssh$ #ignore:hostname,hostname2 uname -a`
 
 If you wish to close the program, simply write exit:
 

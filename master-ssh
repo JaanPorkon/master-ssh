@@ -168,33 +168,36 @@ class MasterSSH:
 				break
 			else:
 
-				if cmd.startswith('master-ssh'):
+				if cmd.startswith('#'):
 
-					if cmd == "master-ssh:help":
+					"""
+					INTERNAL COMMANDS
+					"""
 
-						print "+===================================================================================+"
-						print "|                                                                                   |"
-						print "|                               Welcome to master-ssh!                              |"
-						print "|                    Made by Jaan Porkon <jaantrill[at]gmail.com>                   |"
-						print "|                      https://github.com/JaanPorkon/master-ssh                     |"
-						print "|                                                                                   |"
-						print "| Example syntax:                                                                   |"
-						print "| master-ssh:[command]                                                              |"
-						print "|                                                                                   |"
-						print "| Example command:                                                                  |"
-						print "| master-ssh:list-connections                                                       |"
-						print "|                                                                                   |"
-						print "| Below you can find available commands that you can use:                           |"
-						print "|                                                                                   |"
-						print "| help - Displays this message                                                      |"
-						print "| list-connections - Lists the state of all connections                             |"
-						print "| disconnect:[hostname] - Disconnects a specific host and removes it from the pool  |"
-						print "|                       - Example:                                                  |"
-						print "|                         master-ssh:disconnect:host2                               |"
-						print "|                                                                                   |"
-						print "+===================================================================================+"
+					if cmd == "#help" or cmd == "#":
 
-					elif cmd == "master-ssh:list-connections":
+						print "Welcome to master-ssh!"
+						print "Made by Jaan Porkon <jaantrill[at]gmail.com>"
+						print "https://github.com/JaanPorkon/master-ssh"
+						print ""
+						print "Example syntax:"
+						print "#[command]"
+						print ""
+						print "Example command:"
+						print "#help"
+						print ""
+						print "Below you can find available commands that you can use:"
+						print ""
+						print "help                                   - Displays this message"
+						print "list-connections                       - Lists the state of all connections"
+						print "disconnect:[hostname,hostname2,...]    - Disconnects a specific host and removes it from the pool"
+						print "                                       - Example:"
+						print "                                         #disconnect:host1"
+						print "                                       - or multiple servers:"
+						print "                                         #disconnect:host2,host3"
+						print "ignore:[hostname,hostname2] [command]  - Ignores servers that are listed"
+
+					elif cmd == "#list-connections":
 						
 						for name, con in self.connectionPool.iteritems():
 
@@ -205,80 +208,114 @@ class MasterSSH:
 							else:
 								self.printServerError(name, "is disconnected")
 
-					elif cmd.startswith('master-ssh:disconnect'):
+					elif cmd.startswith('#disconnect'):
 
-						server = cmd.strip().split(':')[-1]
+						servers = cmd.strip().split(':')[-1]
 
-						if server in self.connectionPool:							
-							connection = self.connectionPool[server]
+						for server in servers.split(','):
+							if server in self.connectionPool:							
+								connection = self.connectionPool[server]
 
-							try:
-								if connection.get_transport().is_active():
-									connection.exec_command('exit')
-									connection.close()
-									self.connectionPool.pop(server)
+								try:
+									if connection.get_transport().is_active():
+										connection.exec_command('exit')
+										connection.close()
+										self.connectionPool.pop(server)
 
-									self.printSuccess(server + " successfully disconnected!")
-								else:
-									self.connectionPool.pop(server)
-							except Exception, e:
-								self.printError('Unable to disconnect: ' + server + ' (' + str(e) + ')')
+										self.printSuccess(server + " successfully disconnected!")
+									else:
+										self.connectionPool.pop(server)
+								except Exception, e:
+									self.printError('Unable to disconnect: ' + server + ' (' + str(e) + ')')
 
-						else:
-							self.printError(server + " does not exist!")
+							else:
+								self.printError(server + " does not exist!")
 
 
 						if len(self.connectionPool) == 0:
 							self.printMessage("Connection pool is empty, closing the program..")
 							sys.exit(0)
 
-
 					else:
+
+						"""
+						SERVER COMMANDS
+						"""
+
+						useIgnoreList = False
+						serverListStart = 1
 
 						findSpace = cmd.find(' ')
 						command = cmd[(findSpace + 1):len(cmd)].strip()
-						server = cmd[11:findSpace].strip()
-						
-						if "," in server:
+
+						if cmd.startswith("#ignore:"):
+							serverListStart = 8
+							useIgnoreList = True
+
+						server = cmd[serverListStart:findSpace].strip()
+
+						if useIgnoreList:
+
+							ignoreList = server.strip().split(',')
 
 							threadPool = {}
-							threadPos = 1
+							threadPos = 1	
 
-							for server in server.split(','):
+							for name,con in self.connectionPool.iteritems():							
+
+								if name not in ignoreList:
+									threadPool[threadPos] = threading.Thread(target=self.execute, args=(command, name, con,))
+									threadPool[threadPos].daemon = True
+									threadPool[threadPos].start()
+									threadPos += 1
+									
+							for i in range(1, threadPos):
+								threadPool[i].join()
+
+							ignoreList = []
+
+						else:
+						
+							if "," in server:
+
+								threadPool = {}
+								threadPos = 1
+
+								for server in server.split(','):
+
+									if server not in self.connectionPool:
+										self.printError(server + " does not exist!")
+									else:
+										con = self.connectionPool[server]
+
+										threadPool[threadPos] = threading.Thread(target=self.execute, args=(command, server, con,))
+										threadPool[threadPos].daemon = True
+										threadPool[threadPos].start()
+										threadPos += 1
+									
+								for i in range(1, threadPos):
+									threadPool[i].join()
+
+							else:
 
 								if server not in self.connectionPool:
 									self.printError(server + " does not exist!")
 								else:
-									con = self.connectionPool[server]
+									stdin, stdout, stderr = self.connectionPool[server].exec_command(command)
 
-									threadPool[threadPos] = threading.Thread(target=self.execute, args=(command, server, con,))
-									threadPool[threadPos].daemon = True
-									threadPool[threadPos].start()
-									threadPos += 1
-								
-							for i in range(1, threadPos):
-								threadPool[i].join()
+									error = ""
 
-						else:
+									for line in stderr:
+										error += "\n" + line
 
-							if server not in self.connectionPool:
-								self.printError(server + " does not exist!")
-							else:
-								stdin, stdout, stderr = self.connectionPool[server].exec_command(command)
+									self.printServerError(server, error.strip())
 
-								error = ""
+									response = ""
 
-								for line in stderr:
-									error += "\n" + line
+									for line in stdout:
+										response += line
 
-								self.printServerError(server, error.strip())
-
-								response = ""
-
-								for line in stdout:
-									response += line
-
-								self.printAction(server, response.strip())
+									self.printAction(server, response.strip())
 
 
 				else:
@@ -322,7 +359,7 @@ class MasterSSH:
 		print message
 
 	def printAction(self, server, message):
-		print '\033[92m\033[1m\033[4m[' + server + ']\033[0m: ' + message
+		print '\033[92m\033[1m\033[4m[' + server + ']\033[0m: \n' + message
 
 	def printSuccess(self, message):
 		print "\033[92m" + message + '\033[0m'
