@@ -40,12 +40,15 @@ Example:
 This code is depending on:
 * Paramiko (https://github.com/paramiko/paramiko)
 * Requests (https://github.com/kennethreitz/requests)
-* Optparse (https://docs.python.org/2/library/optparse.html)
 
 If you get an error that pip is missing, you can install it like this:
 
 Ubuntu/Debian
-`apt-get install python-pip`
+```
+apt-get install python-pip
+```
 
 CentOS/Fedora
-`yum install python-pip`
+```
+yum install python-pip
+```
