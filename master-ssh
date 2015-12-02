@@ -8,6 +8,11 @@ import time
 import threading
 import ConfigParser
 import os
+import select
+import termios
+import tty
+import socket
+from paramiko.py3compat import u
 
 class MasterSSH:
 
@@ -213,18 +218,12 @@ class MasterSSH:
 	"""
 	def exit(self, name):
 			
-			print "exiting"
 			try:
-				print "sending command"
-				self.connectionPool[name].exec_command('exit', timeout=2)	
-				print "Command sent!"			
+				self.connectionPool[name].exec_command('exit', timeout=int(self.config.get('timeout', 'exit_cmd')))			
 			except Exception, e:
-				print "printing error"
 				self.printError(str(e))
 
-			print "sending close"
 			self.connectionPool[name].close()
-			print "close sent"
 			self.printAction(name, "disconnected...")
 
 	"""
@@ -272,6 +271,7 @@ class MasterSSH:
 						print "                                              #disconnect:host2,host3"
 						print "ignore:[hostname,hostname2] [command]       - Ignores servers that are listed"
 						print "connect:[host],[username],[password],[name] - Connects to a server. [name] is optional, but suggested"
+						print "tunnel:[hostname]                           - Opens a direct tunnel into the server"
 
 					# List all connections
 					elif cmd == "#list-connections":
@@ -301,6 +301,7 @@ class MasterSSH:
 					# Disconnect specific servers from the pool
 					elif cmd.startswith('#disconnect:'):
 
+						disconnected = False
 						servers = cmd.strip().split(':')[-1]
 
 						for server in servers.split(','):
@@ -309,13 +310,16 @@ class MasterSSH:
 
 								try:
 									if connection.get_transport().is_active():
-										connection.exec_command('exit')
+										connection.exec_command('exit', timeout=int(self.config.get('timeout', 'exit_cmd')))
 										connection.close()
 										self.connectionPool.pop(server)
 
 										self.printSuccess(server + " successfully disconnected!")
 									else:
 										self.connectionPool.pop(server)
+
+									disconnected = True
+
 								except Exception, e:
 									self.printError('Unable to disconnect: ' + server + ' (' + str(e) + ')')
 
@@ -323,9 +327,54 @@ class MasterSSH:
 								self.printError(server + " does not exist!")
 
 
-						if len(self.connectionPool) == 0:
+						if len(self.connectionPool) == 0 and disconnected:
 							self.printMessage("Connection pool is empty, closing the program..")
 							sys.exit(0)
+
+					elif cmd.startswith('#tunnel:'):
+
+						server = cmd.replace('#tunnel:', '')
+
+						channel = self.connectionPool[server].invoke_shell()
+						channel.settimeout(10)
+						channelBuffer = ''
+						lineBuffer = ''
+
+						oldtty = termios.tcgetattr(sys.stdin)
+						try:
+							tty.setraw(sys.stdin.fileno())
+							tty.setcbreak(sys.stdin.fileno())
+							channel.settimeout(0.0)
+
+							while True:
+								r, w, e = select.select([channel, sys.stdin], [], [])
+
+								if channel in r:
+									try:
+
+										x = u(channel.recv(1024))
+
+										if len(x) == 0:
+											sys.stdout.write('\r\n\r\n')
+											break
+
+										sys.stdout.write(x)
+										sys.stdout.flush()
+
+									except socket.timeout:
+										pass
+
+								if sys.stdin in r:
+
+									x = sys.stdin.read(1)
+
+									if len(x) == 0:
+										break
+
+									channel.send(x)
+
+						finally:
+							termios.tcsetattr(sys.stdin, termios.TCSADRAIN, oldtty)
 
 					else:
 
@@ -410,7 +459,7 @@ class MasterSSH:
 									for line in stdout:
 										response += line
 
-									self.printServerAction(server, response.strip())
+									self.printServerAction(server, response.strip())								
 
 
 				# If user haven't defined any internal comments, send user's command to all of the servers
@@ -428,6 +477,7 @@ class MasterSSH:
 					for i in range(1, threadPos):
 						threadPool[i].join()
 							
+
 	"""
 	Execute user's command
 	"""
