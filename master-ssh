@@ -2,7 +2,7 @@
 
 import paramiko
 import requests
-import optparse
+import argparse
 import sys
 import time
 import threading
@@ -10,28 +10,28 @@ import threading
 class MasterSSH:
 
 	connectionPool = {}
-	creditials = []
+	credentials = []
 
 	def __init__(self):
-		parser = optparse.OptionParser()
-		parser.add_option('--cred-url', dest='cred_url', default=None)
-		parser.add_option('--cred-file', dest='cred_file', default=None)
+		parser = argparse.ArgumentParser()
+		parser.add_argument('--cred-url', dest='cred_url', default=None, help='URL that points to credentials data')
+		parser.add_argument('--cred-file', dest='cred_file', default=None, help='Path to your credentials file')
 
-		options, remainder = parser.parse_args()
+		args = parser.parse_args()
 
 		credSourceType = None
 		credSourcePath = None
 
-		if options.cred_file != None:
-			credSourcePath = options.cred_file
+		if args.cred_file != None:
+			credSourcePath = args.cred_url
 			credSourceType = 'file'
 			
-		if options.cred_url != None:
-			credSourcePath = options.cred_url
+		if args.cred_url != None:
+			credSourcePath = args.cred_url
 			credSourceType = 'url'
 
 		if credSourcePath == None:
-			print "You need to specify a creditials path [--cred-url, --cred-path]"
+			print "You need to specify a credentials path [--cred-url, --cred-path]"
 			sys.exit(1)
 
 		if credSourceType == 'file':
@@ -39,7 +39,7 @@ class MasterSSH:
 				for line in r.readlines():
 					data = line.strip().split(',')
 
-					self.creditials.append({
+					self.credentials.append({
 						'name': data[0],
 						'host': data[1],
 						'username': data[2],
@@ -52,7 +52,7 @@ class MasterSSH:
 			for line in response.text.strip().split('\n'):
 				data = line.split(',')
 
-				self.creditials.append({
+				self.credentials.append({
 					'name': data[0],
 					'host': data[1],
 					'username': data[2],
@@ -64,7 +64,7 @@ class MasterSSH:
 		threadPool = {}
 		threadPos = 1		
 
-		for cred in self.creditials:
+		for cred in self.credentials:
 			threadPool[threadPos] = threading.Thread(target=self.connect, args=(cred['name'], cred['host'], cred['username'], cred['password'],))
 			threadPool[threadPos].daemon = True
 			threadPool[threadPos].start()
