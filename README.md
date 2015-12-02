@@ -7,6 +7,7 @@ It's a little tool that allows you to connect to multiple SSH tunnels at the sam
 git clone https://github.com/JaanPorkon/master-ssh.git
 cd master-ssh
 chmod o+x install.sh
+./install.sh
 ```
 
 ####Usage
