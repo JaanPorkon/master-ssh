@@ -9,8 +9,10 @@ First you can add this script to your local bin:
 
 To run the program you can feed credentials to it from URL or from a file. Source of the web page and file must be in CSV style:
 
-```hostname,127.0.0.1,username,password
-hostname2,127.0.0.2,username,password```
+```
+hostname,127.0.0.1,username,password
+hostname2,127.0.0.2,username,password
+```
 
 Example:
 
@@ -22,7 +24,7 @@ or
 
 To send command to 1 server only use the following command pattern:
 
-master-ssh:[hostname] [command]
+_master-ssh:[hostname] [command]_
 
 Example:
 
