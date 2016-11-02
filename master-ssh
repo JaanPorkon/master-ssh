@@ -95,7 +95,7 @@ class MasterSSH:
 			except requests.TooManyRedirects:
 				self.printError("There are too many redirects for your URL, check your server configuration!")
 				sys.exit(1)
-			except Exception, e:
+			except Exception as e:
 				self.printError("Something went wrong: " + str(e))
 				sys.exit(1)
 
@@ -220,7 +220,7 @@ class MasterSSH:
 			
 			try:
 				self.connectionPool[name].exec_command('exit', timeout=int(self.config.get('timeout', 'exit_cmd')))			
-			except Exception, e:
+			except Exception as e:
 				self.printError(str(e))
 
 			self.connectionPool[name].close()
@@ -250,28 +250,27 @@ class MasterSSH:
 
 					if cmd == "#help" or cmd == "#":
 
-						print "Welcome to master-ssh!"
-						print "Made by Jaan Porkon <jaantrill[at]gmail.com>"
-						print "https://github.com/JaanPorkon/master-ssh"
-						print ""
-						print "Example syntax:"
-						print "#[command]"
-						print ""
-						print "Example command:"
-						print "#help"
-						print ""
-						print "Below you can find available commands that you can use:"
-						print ""
-						print "help                                        - Displays this message"
-						print "list-connections                            - Lists the state of all connections"
-						print "disconnect:[hostname,hostname2,...]         - Disconnects a specific host and removes it from the pool"
-						print "                                            - Example:"
-						print "                                              #disconnect:host1"
-						print "                                            - or multiple servers:"
-						print "                                              #disconnect:host2,host3"
-						print "ignore:[hostname,hostname2] [command]       - Ignores servers that are listed"
-						print "connect:[host],[username],[password],[name] - Connects to a server. [name] is optional, but suggested"
-						print "tunnel:[hostname]                           - Opens a direct tunnel into the server"
+						print("Welcome to master-ssh!")
+						print("Made by Jaan Porkon <jaantrill[at]gmail.com>")
+						print("https://github.com/JaanPorkon/master-ssh")
+						print("")
+						print("Example syntax:")
+						print("#[command]")
+						print("")
+						print("Example command:")
+						print("#help")
+						print("")
+						print("Below you can find available commands that you can use:")
+						print("")
+						print("help                                        - Displays this message")
+						print("list-connections                            - Lists the state of all connections")
+						print("disconnect:[hostname,hostname2,...]         - Disconnects a specific host and removes it from the pool")
+						print("                                            - Example:")
+						print("                                              #disconnect:host1")
+						print("                                            - or multiple servers:")
+						print("                                              #disconnect:host2,host3")
+						print("ignore:[hostname,hostname2] [command]       - Ignores servers that are listed")
+						print("connect:[host],[username],[password],[name] - Connects to a server. [name] is optional, but suggested")
 
 					# List all connections
 					elif cmd == "#list-connections":
@@ -320,7 +319,7 @@ class MasterSSH:
 
 									disconnected = True
 
-								except Exception, e:
+								except Exception as e:
 									self.printError('Unable to disconnect: ' + server + ' (' + str(e) + ')')
 
 							else:
@@ -330,51 +329,6 @@ class MasterSSH:
 						if len(self.connectionPool) == 0 and disconnected:
 							self.printMessage("Connection pool is empty, closing the program..")
 							sys.exit(0)
-
-					elif cmd.startswith('#tunnel:'):
-
-						server = cmd.replace('#tunnel:', '')
-
-						channel = self.connectionPool[server].invoke_shell()
-						channel.settimeout(10)
-						channelBuffer = ''
-						lineBuffer = ''
-
-						oldtty = termios.tcgetattr(sys.stdin)
-						try:
-							tty.setraw(sys.stdin.fileno())
-							tty.setcbreak(sys.stdin.fileno())
-							channel.settimeout(0.0)
-
-							while True:
-								r, w, e = select.select([channel, sys.stdin], [], [])
-
-								if channel in r:
-									try:
-
-										x = u(channel.recv(1024))
-
-										if len(x) == 0:
-											sys.stdout.write('\r\n\r\n')
-											break
-
-										sys.stdout.write(x)
-										sys.stdout.flush()
-
-									except socket.timeout:
-										pass
-
-								if sys.stdin in r:
-
-									x = sys.stdin.read(1)
-
-									if len(x) == 0:
-										break
-
-									channel.send(x)
-
-						finally:
-							termios.tcsetattr(sys.stdin, termios.TCSADRAIN, oldtty)
 
 					else:
 
@@ -503,24 +457,24 @@ class MasterSSH:
 	"""
 
 	def printMessage(self, message):
-		print message
+		print(message)
 
 	def printAction(self, server, message):
-		print '\033[92m\033[1m\033[4m[' + server + ']\033[0m: ' + message
+		print('\033[92m\033[1m\033[4m[' + server + ']\033[0m: ' + message)
 
 	def printServerAction(self, server, message):
-		print '\033[92m\033[1m\033[4m[' + server + ']\033[0m:\n' + message
+		print('\033[92m\033[1m\033[4m[' + server + ']\033[0m:\n' + message)
 
 	def printSuccess(self, message):
-		print "\033[92m" + message + '\033[0m'
+		print("\033[92m" + message + '\033[0m')
 
 	def printError(self, message):
 		if message != "":
-			print 'master-ssh: \033[91m' + message + '\033[0m'
+			print('master-ssh: \033[91m' + message + '\033[0m')
 
 	def printServerError(self, server, message):
 		if message != "":
-			print '\033[92m\033[1m\033[4m[' + server + ']\033[0m: \033[91m' + message + '\033[0m'
+			print('\033[92m\033[1m\033[4m[' + server + ']\033[0m: \033[91m' + message + '\033[0m')
 
 	def parseConfig(self):
 		configPath = os.path.realpath("/usr/local/bin/master-ssh").split('/')
