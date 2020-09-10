@@ -7,6 +7,8 @@ import time
 import threading
 import os
 import logging
+
+from paramiko import SSHException
 from termcolor import colored
 
 logger = logging.getLogger('MasterSSH')
@@ -133,14 +135,14 @@ class MasterSSH:
             # If there are specific servers user wants to use, use them ...
             if use_selected_servers:
                 if cred['name'] in self.selected_servers:
-                    thread_pool[thread_pos] = threading.Thread(target=self.connect, name=cred['name'], args=(cred['name'], cred['host'], cred['username'], cred['password'], self.config.port))
+                    thread_pool[thread_pos] = threading.Thread(target=self.connect, name=cred['name'], args=(cred['name'], cred['host'], cred['username'], cred['password'], self.config.port, self.config.connection_timeout))
                     thread_pool[thread_pos].daemon = True
                     thread_pool[thread_pos].start()
                     thread_pos += 1
 
             # ... if not, use all of them
             else:
-                thread_pool[thread_pos] = threading.Thread(target=self.connect, name=cred['name'], args=(cred['name'], cred['host'], cred['username'], cred['password'], self.config.port))
+                thread_pool[thread_pos] = threading.Thread(target=self.connect, name=cred['name'], args=(cred['name'], cred['host'], cred['username'], cred['password'], self.config.port, self.config.connection_timeout))
                 thread_pool[thread_pos].daemon = True
                 thread_pool[thread_pos].start()
                 thread_pos += 1
@@ -154,35 +156,33 @@ class MasterSSH:
     Connect to the server
     """
 
-    def connect(self, name, host, username, password, port):
+    def connect(self, name, host, username, password, port, timeout):
         tries = 1
         max_tries = self.config.max_retries
 
-        while True:
-            if tries == max_tries:
-                self.print_error("Unable to connect, giving up!")
-                break
-
+        while tries <= max_tries:
             try:
                 client = paramiko.SSHClient()
                 client.set_log_channel('SSHClient')
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(host, username=username, password=password, port=port)
+                client.connect(host, username=username, password=password, port=port, timeout=timeout)
                 client.get_transport().set_keepalive(30)
 
                 self.connection_pool[name] = client
                 self.print_success("Successfully connected!")
 
-                break
+                return
             except paramiko.ssh_exception.AuthenticationException:
                 self.print_error("Failed to connect - Wrong login details!")
-                break
+                return
             except Exception as e:
                 self.print_error("Failed to connect! Retrying (%s/%s)" % (tries, max_tries))
                 self.print_exception(e)
 
                 tries += 1
                 time.sleep(self.config.retry_delay)
+
+        self.print_error("Unable to connect, giving up!")
 
     """
     Create connection closing threads
@@ -226,7 +226,11 @@ class MasterSSH:
 
         while True:
             # Listen for user input
-            cmd = input('master-ssh$ ').strip()
+            try:
+                cmd = input('master-ssh$ ').strip()
+            except KeyboardInterrupt:
+                self.close_connections()
+                break
 
             if cmd == "":
                 self.print_error('Please enter your command!')
@@ -333,13 +337,13 @@ class MasterSSH:
                         if use_ignore_list:
                             for name, connection in self.connection_pool.items():
                                 if name not in ignored_server_list:
-                                    thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(command.strip(), name, connection,))
+                                    thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(command.strip(), connection,))
                                     thread_pool[thread_pos].daemon = True
                                     thread_pool[thread_pos].start()
                                     thread_pos += 1
                         else:
                             for name, connection in self.connection_pool.items():
-                                thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(command.strip(), name, connection,))
+                                thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(command.strip(), connection,))
                                 thread_pool[thread_pos].daemon = True
                                 thread_pool[thread_pos].start()
                                 thread_pos += 1
@@ -356,7 +360,7 @@ class MasterSSH:
                         thread_pos = 1
 
                         for name, connection in self.connection_pool.items():
-                            thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(cmd, name, connection,))
+                            thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(cmd, connection, self.config.cmd_timeout))
                             thread_pool[thread_pos].daemon = True
                             thread_pool[thread_pos].start()
                             thread_pos += 1
@@ -368,28 +372,35 @@ class MasterSSH:
     Execute user's command
     """
 
-    def execute(self, cmd, name, connection):
-        stdin, stdout, stderr = connection.exec_command(cmd)
+    def execute(self, cmd, connection, timeout):
+        try:
+            stdin, stdout, stderr = connection.exec_command(cmd, timeout=timeout)
 
-        error = ""
+            error = ""
 
-        for line in stderr:
-            error += "\n%s" % line
+            for line in stderr:
+                error += '%s\n' % line.strip()
 
-        error = error.strip()
+            error = error.strip()
 
-        if error != "":
-            self.print_server_error(error)
+            if error != "":
+                self.print_server_error(error)
 
-        response = ""
+            response = ""
 
-        for line in stdout:
-            response += "\n%s" % line
+            for line in stdout:
+                response += '%s\n' % line.strip()
 
-        response = response.strip()
+            response = response.strip()
 
-        if response != "":
-            self.print_server_action(response)
+            if response != "":
+                self.print_server_action(response)
+        except SSHException as e:
+            self.print_error('Unable to execute the command!')
+            self.print_exception(e)
+        except Exception as e:
+            self.print_error('Something went wrong!')
+            self.print_exception(e)
 
     """
     Helper methods
@@ -405,7 +416,7 @@ class MasterSSH:
         logger.info(colored(message, color='green'))
 
     def print_error(self, message):
-        logger.error('master-ssh: %s' % colored(message, on_color='on_red', attrs=['bold']))
+        logger.error(colored(message, on_color='on_red', attrs=['bold']))
 
     def print_exception(self, err):
         logger.exception(err)

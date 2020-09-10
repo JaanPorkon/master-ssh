@@ -17,6 +17,8 @@ arg_parser.add_argument('--port', dest='port', default=22, help='Sets the custom
 arg_parser.add_argument('--exit-timeout', dest='exit_timeout', default=5, help='Sets the timeout for exit command')
 arg_parser.add_argument('--max-retries', dest='max_retries', default=5, help='Sets the limit for connection retries')
 arg_parser.add_argument('--retry-delay', dest='retry_delay', default=5, help='Sets the sleep timeout in seconds')
+arg_parser.add_argument('--connection-timeout', dest='connection_timeout', default=10, help='Sets the connection timeout in seconds')
+arg_parser.add_argument('--cmd-timeout', dest='cmd_timeout', default=10, help='Sets the command execution timeout in seconds')
 
 args = arg_parser.parse_args()
 
