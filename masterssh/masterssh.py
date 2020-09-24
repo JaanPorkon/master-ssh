@@ -337,13 +337,13 @@ class MasterSSH:
                         if use_ignore_list:
                             for name, connection in self.connection_pool.items():
                                 if name not in ignored_server_list:
-                                    thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(command.strip(), connection,))
+                                    thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(command.strip(), connection, int(self.config.cmd_timeout)))
                                     thread_pool[thread_pos].daemon = True
                                     thread_pool[thread_pos].start()
                                     thread_pos += 1
                         else:
                             for name, connection in self.connection_pool.items():
-                                thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(command.strip(), connection,))
+                                thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(command.strip(), connection, int(self.config.cmd_timeout)))
                                 thread_pool[thread_pos].daemon = True
                                 thread_pool[thread_pos].start()
                                 thread_pos += 1
@@ -360,7 +360,7 @@ class MasterSSH:
                         thread_pos = 1
 
                         for name, connection in self.connection_pool.items():
-                            thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(cmd, connection, self.config.cmd_timeout))
+                            thread_pool[thread_pos] = threading.Thread(target=self.execute, name=name, args=(cmd, connection, int(self.config.cmd_timeout)))
                             thread_pool[thread_pos].daemon = True
                             thread_pool[thread_pos].start()
                             thread_pos += 1

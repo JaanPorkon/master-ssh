@@ -5,7 +5,7 @@ with open('README.md', 'r') as f:
 
 setuptools.setup(
     name='master-ssh',
-    version='2.0.7',
+    version='2.0.8.1',
     author='Jaan Porkon',
     author_email='jaantrill@gmail.com',
     description='Tool to connect to multiple SSH servers and broadcast commands.',
